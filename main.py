@@ -42,13 +42,22 @@ def scrape_emails_from_url(driver, url):
 
 async def run_scraper_async(urls, spinner_placeholder):
     chrome_options = Options()
-    chrome_options.add_argument('--headless')
-    chrome_options.add_argument('--no-sandbox')
-    chrome_options.add_argument('--disable-dev-shm-usage')
+    
+    # Essential arguments for containerized environment
+    chrome_options.add_argument("--headless=new")  # New headless mode
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--window-size=1920x1080")
-
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+    
+    # Additional stability options
+    chrome_options.add_argument("--disable-extensions")
+    chrome_options.add_argument("--disable-infobars")
+    chrome_options.add_argument("--disable-browser-side-navigation")
+    chrome_options.add_argument("--disable-features=VizDisplayCompositor")
+    
+    # Configure ChromeDriver
+    service = Service(ChromeDriverManager().install())
 
     loop = asyncio.get_event_loop()
     executor = ThreadPoolExecutor(max_workers=3)
@@ -160,3 +169,4 @@ if uploaded_file:
             )
 
         asyncio.run(scrape_and_display())
+
