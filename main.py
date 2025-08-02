@@ -27,13 +27,14 @@ def init_driver():
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--disable-gpu")
 
+    # ✅ Important: Specify the correct path to ChromeDriver
     driver = webdriver.Chrome(
-        service=Service("/usr/bin/chromedriver"),  # ✅ Manually installed correct driver
+        service=Service("/usr/bin/chromedriver"),
         options=chrome_options
     )
     return driver
+
 
 
 def scrape_emails_from_url(url):
@@ -110,6 +111,7 @@ if uploaded_file:
             "Scraped_by_the_SeekGps.csv",
             "text/csv"
         )
+
 
 
 
