@@ -2,4 +2,3 @@ selenium
 webdriver-manager
 pandas
 playwright
-playwright install
