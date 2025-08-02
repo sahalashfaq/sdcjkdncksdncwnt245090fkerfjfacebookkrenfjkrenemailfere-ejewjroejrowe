@@ -42,17 +42,14 @@ def scrape_emails_from_url(driver, url):
 
 async def run_scraper_async(urls, spinner_placeholder):
     chrome_options = Options()
-    chrome_options.add_argument('--headless')  # Required for Streamlit Cloud
+    chrome_options.add_argument('--headless')
     chrome_options.add_argument('--no-sandbox')
     chrome_options.add_argument('--disable-dev-shm-usage')
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--window-size=1920x1080")
-    driver = webdriver.Chrome(options=chrome_options)
 
-    # Launch browser
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
-    return driver
-    
+
     loop = asyncio.get_event_loop()
     executor = ThreadPoolExecutor(max_workers=3)
 
@@ -105,7 +102,6 @@ if uploaded_file:
         spinner_placeholder = st.empty()
         countdown_placeholder = st.empty()
 
-        # Custom loading spinner HTML
         spinner_placeholder.markdown("""
             <div style="display:flex;flex-direction:row;gap:10px;justify-content:flex-start;align-items:center;">
                 <div class="loader"></div>
@@ -139,7 +135,6 @@ if uploaded_file:
         async def scrape_and_display():
             all_results = []
             async for update in run_scraper_async(urls, spinner_placeholder):
-                # Custom loading spinner HTML
                 progress_bar.progress(update["progress"])
                 status_placeholder.markdown(f"""
                     **Progress:** {update["scraped"]} / {len(urls)}  
@@ -165,4 +160,3 @@ if uploaded_file:
             )
 
         asyncio.run(scrape_and_display())
-
