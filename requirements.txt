@@ -1,4 +1,4 @@
 selenium
 webdriver-manager
 pandas
-playwright.async_api
+playwright
