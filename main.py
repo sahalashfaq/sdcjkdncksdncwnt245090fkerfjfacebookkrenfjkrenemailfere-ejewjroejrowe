@@ -8,6 +8,8 @@ from selenium.webdriver.chrome.service import Service  # ✅ ADD THIS
 from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
 from concurrent.futures import ThreadPoolExecutor
+import os
+chrome_options.binary_location = "/usr/bin/google-chrome"  # ⬅ required on Streamlit Cloud
 
 
 # ----------------- Set Page Config First --------------------
@@ -44,6 +46,7 @@ def scrape_emails_from_url(driver, url):
 async def run_scraper_async(urls, spinner_placeholder):
     chrome_options = Options()
     chrome_options.add_argument("--headless")  # Optional: required on Streamlit Cloud
+    chrome_options.binary_location = "/usr/bin/google-chrome"
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
@@ -181,6 +184,7 @@ if uploaded_file:
             )
 
         asyncio.run(scrape_and_display())
+
 
 
 
