@@ -5,6 +5,12 @@ import asyncio
 import time
 from concurrent.futures import ThreadPoolExecutor
 from playwright.async_api import async_playwright
+import subprocess
+import os
+
+# Install Playwright browsers on the fly (if not already installed)
+if not os.path.exists(os.path.expanduser("~/.cache/ms-playwright")):
+    subprocess.run(["playwright", "install", "chromium"], check=True)
 
 # ----------------- Set Page Config --------------------
 st.set_page_config(layout="centered")
@@ -149,3 +155,4 @@ if uploaded_file:
             )
 
         asyncio.run(scrape_and_display())
+
