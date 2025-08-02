@@ -5,6 +5,7 @@ import asyncio
 import time
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
 from concurrent.futures import ThreadPoolExecutor
 
 # ----------------- Set Page Config First --------------------
@@ -178,3 +179,4 @@ if uploaded_file:
             )
 
         asyncio.run(scrape_and_display())
+
