@@ -58,7 +58,11 @@ async def run_scraper_async(urls, spinner_placeholder):
 
     # Initialize WebDriver
     service = Service(ChromeDriverManager().install())
-    driver = webdriver.Chrome(service=service, options=chrome_options)  # ✅ This was missing
+    # Automatically match ChromeDriver with installed Chrome version
+    driver = webdriver.Chrome(
+      service=Service(ChromeDriverManager().install()),
+      options=chrome_options
+    )
 
     loop = asyncio.get_event_loop()
     executor = ThreadPoolExecutor(max_workers=3)
@@ -171,5 +175,6 @@ if uploaded_file:
             )
 
         asyncio.run(scrape_and_display())
+
 
 
