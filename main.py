@@ -44,20 +44,21 @@ async def run_scraper_async(urls, spinner_placeholder):
     chrome_options = Options()
     
     # Essential arguments for containerized environment
-    chrome_options.add_argument("--headless=new")  # New headless mode
+    chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--window-size=1920x1080")
-    
+
     # Additional stability options
     chrome_options.add_argument("--disable-extensions")
     chrome_options.add_argument("--disable-infobars")
     chrome_options.add_argument("--disable-browser-side-navigation")
     chrome_options.add_argument("--disable-features=VizDisplayCompositor")
-    
-    # Configure ChromeDriver
+
+    # Initialize WebDriver
     service = Service(ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=service, options=chrome_options)  # ✅ This was missing
 
     loop = asyncio.get_event_loop()
     executor = ThreadPoolExecutor(max_workers=3)
@@ -89,6 +90,7 @@ async def run_scraper_async(urls, spinner_placeholder):
         }
 
     driver.quit()
+
 
 # ----------------- File Upload UI --------------------
 uploaded_file = st.file_uploader("Upload CSV or XLSX file containing Facebook URLs", type=["csv", "xlsx"])
@@ -169,4 +171,5 @@ if uploaded_file:
             )
 
         asyncio.run(scrape_and_display())
+
 
