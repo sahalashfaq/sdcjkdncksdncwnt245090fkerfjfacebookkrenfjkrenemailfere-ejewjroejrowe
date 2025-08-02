@@ -4,12 +4,8 @@ import re
 import asyncio
 import time
 from selenium import webdriver
-from selenium.webdriver.chrome.service import Service  # ✅ ADD THIS
 from selenium.webdriver.chrome.options import Options
-from webdriver_manager.chrome import ChromeDriverManager
 from concurrent.futures import ThreadPoolExecutor
-import os
-
 
 # ----------------- Set Page Config First --------------------
 st.set_page_config(layout="centered")
@@ -44,11 +40,10 @@ def scrape_emails_from_url(driver, url):
 
 async def run_scraper_async(urls, spinner_placeholder):
     chrome_options = Options()
-    chrome_options.add_argument("--headless")  # Optional: required on Streamlit Cloud
-    chrome_options.binary_location = "/usr/bin/google-chrome"
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--disable-gpu")
+    driver = webdriver.Chrome(options=chrome_options)
+
     loop = asyncio.get_event_loop()
     executor = ThreadPoolExecutor(max_workers=3)
 
@@ -128,28 +123,6 @@ if uploaded_file:
             </style>
         """, unsafe_allow_html=True)
 
-        spinner_placeholder2 = st.empty()
-        spinner_placeholder2.markdown("""
-            <div style="display:flex;flex-direction:row;gap:10px;justify-content:flex-start;align-items:center;">
-                <div class="loader"></div>
-                <p style="margin-top:16px;font-size:14px;color:#555;">Processing The Data...</p>
-            </div>
-            <style>
-            .loader {
-                border: 5px solid white;
-                box-shadow:0px 0px 2px black;
-                border-top: 5px solid #FD653D;
-                border-radius: 50%;
-                width: 30px;
-                height: 30px;
-                animation: spin 1s linear infinite;
-            }
-            @keyframes spin {
-                0% { transform: rotate(0deg); }
-                100% { transform: rotate(360deg); }
-            }
-            </style>
-            """, unsafe_allow_html=True)
         progress_bar = st.progress(0)
         status_placeholder = st.empty()
         table_placeholder = st.empty()
@@ -183,9 +156,3 @@ if uploaded_file:
             )
 
         asyncio.run(scrape_and_display())
-
-
-
-
-
-
