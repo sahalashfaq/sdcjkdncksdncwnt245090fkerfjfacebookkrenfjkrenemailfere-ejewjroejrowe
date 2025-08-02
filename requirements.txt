@@ -1,5 +1,5 @@
 streamlit
-pandas
 selenium
 webdriver-manager
-asyncio
+pandas
+openpyxl
