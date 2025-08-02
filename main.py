@@ -44,7 +44,6 @@ def scrape_emails_from_url(driver, url):
 
 async def run_scraper_async(urls, spinner_placeholder):
     chrome_options = Options()
-    chrome_options.binary_location = "/usr/bin/google-chrome"  # ⬅ required on Streamlit Cloud
     chrome_options.add_argument("--headless")  # Optional: required on Streamlit Cloud
     chrome_options.binary_location = "/usr/bin/google-chrome"
     chrome_options.add_argument("--no-sandbox")
@@ -184,6 +183,7 @@ if uploaded_file:
             )
 
         asyncio.run(scrape_and_display())
+
 
 
 
