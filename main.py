@@ -41,10 +41,10 @@ def scrape_emails_from_url(driver, url):
 
 async def run_scraper_async(urls, spinner_placeholder):
     chrome_options = Options()
-    chrome_options.add_argument("--headless")
-    chrome_options.add_argument("--disable-gpu")
-    driver = webdriver.Chrome(options=chrome_options)
-
+    chrome_options.add_argument("--headless")  # Optional: required on Streamlit Cloud
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
     loop = asyncio.get_event_loop()
     executor = ThreadPoolExecutor(max_workers=3)
 
@@ -179,4 +179,5 @@ if uploaded_file:
             )
 
         asyncio.run(scrape_and_display())
+
 
