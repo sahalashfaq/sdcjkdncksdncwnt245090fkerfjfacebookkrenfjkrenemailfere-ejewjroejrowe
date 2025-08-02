@@ -23,20 +23,18 @@ local_css("style.css")
 # ----------------- Scraper Logic --------------------
 def init_driver():
     chrome_options = Options()
-    chrome_options.add_argument("--headless=new")
+    chrome_options.binary_location = "/usr/bin/chromium-browser"  # ✅ Streamlit Cloud path
+    chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--window-size=1920x1080")
-    chrome_options.add_argument("--disable-extensions")
-    chrome_options.add_argument("--disable-infobars")
-    chrome_options.add_argument("--disable-browser-side-navigation")
-    chrome_options.add_argument("--disable-features=VizDisplayCompositor")
 
     return webdriver.Chrome(
         service=Service(ChromeDriverManager().install()),
         options=chrome_options
     )
+
 
 def scrape_emails_from_url(url):
     try:
@@ -112,3 +110,4 @@ if uploaded_file:
             "Scraped_by_the_SeekGps.csv",
             "text/csv"
         )
+
