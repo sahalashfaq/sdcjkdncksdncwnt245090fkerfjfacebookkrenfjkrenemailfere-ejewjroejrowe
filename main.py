@@ -2,10 +2,6 @@ import streamlit as st
 import pandas as pd
 import re
 import time
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
-from webdriver_manager.chrome import ChromeDriverManager
 
 # ----------------- Set Page Config First --------------------
 st.set_page_config(layout="centered")
@@ -21,19 +17,26 @@ def local_css(file_name):
 local_css("style.css")
 
 # ----------------- Scraper Logic --------------------
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
+
 def init_driver():
     chrome_options = Options()
-    chrome_options.binary_location = "/usr/bin/chromium-browser"  # ✅ Streamlit Cloud path
+    chrome_options.binary_location = "/usr/bin/chromium"  # ✅ Correct path on Streamlit Cloud
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--window-size=1920x1080")
 
-    return webdriver.Chrome(
+    driver = webdriver.Chrome(
         service=Service(ChromeDriverManager().install()),
         options=chrome_options
     )
+    return driver
+
 
 
 def scrape_emails_from_url(url):
@@ -110,4 +113,5 @@ if uploaded_file:
             "Scraped_by_the_SeekGps.csv",
             "text/csv"
         )
+
 
