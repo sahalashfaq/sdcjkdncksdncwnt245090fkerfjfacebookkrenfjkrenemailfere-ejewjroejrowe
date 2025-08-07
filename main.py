@@ -3,16 +3,15 @@ import pandas as pd
 import re
 import asyncio
 import time
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
 from concurrent.futures import ThreadPoolExecutor
-from playwright.async_api import async_playwright
-import subprocess
-import os
+import chromedriver_autoinstaller
 
-# Install Playwright browsers on the fly (if not already installed)
-if not os.path.exists(os.path.expanduser("~/.cache/ms-playwright")):
-    subprocess.run(["playwright", "install", "chromium"], check=True)
+chromedriver_autoinstaller.install()
 
-# ----------------- Set Page Config --------------------
+# ----------------- Set Page Config First 
+# --------------------
 st.set_page_config(layout="centered")
 
 # ----------------- Custom CSS Loader --------------------
@@ -28,34 +27,36 @@ if "total_scraped" not in st.session_state:
 if "estimated_time" not in st.session_state:
     st.session_state.estimated_time = "0 min"
 
-# ----------------- Scraper Logic Using Playwright --------------------
-async def scrape_emails_from_url(url):
+# ----------------- Scraper Logic --------------------
+def scrape_emails_from_url(driver, url):
     try:
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
-            page = await browser.new_page()
-            await page.goto(url, timeout=60000)
-            content = await page.content()
-            await browser.close()
-
-            emails = re.findall(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\\.[a-zA-Z0-9-.]+", content)
-            emails = list(set(emails))
-            return (
-                [{"URL": url, "Email": email} for email in emails]
-                if emails else [{"URL": url, "Email": "No email found"}]
-            )
-    except Exception as e:
-        return [{"URL": url, "Email": f"Error: {str(e)}"}]
+        driver.get(url)
+        html = driver.page_source
+        emails = re.findall(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+", html)
+        emails = list(set(emails))
+        return (
+            [{"URL": url, "Email": email} for email in emails]
+            if emails
+            else [{"URL": url, "Email": "No email found"}]
+        )
+    except Exception:
+        return [{"URL": url, "Email": "Error fetching"}]
 
 async def run_scraper_async(urls, spinner_placeholder):
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--disable-gpu")
+    driver = webdriver.Chrome(options=chrome_options)
+
     loop = asyncio.get_event_loop()
     executor = ThreadPoolExecutor(max_workers=3)
+
     start_time = time.time()
     results = []
-    total = len(urls)
 
+    total = len(urls)
     for i, url in enumerate(urls):
-        row_result = await scrape_emails_from_url(url)
+        row_result = await loop.run_in_executor(executor, scrape_emails_from_url, driver, url)
         results.extend(row_result)
         st.session_state.total_scraped += 1
 
@@ -76,6 +77,8 @@ async def run_scraper_async(urls, spinner_placeholder):
             "current_data": list(results),
         }
 
+    driver.quit()
+
 # ----------------- File Upload UI --------------------
 uploaded_file = st.file_uploader("Upload CSV or XLSX file containing Facebook URLs", type=["csv", "xlsx"])
 
@@ -95,6 +98,7 @@ if uploaded_file:
 
     if st.button("Start Scraping"):
         spinner_placeholder = st.empty()
+        countdown_placeholder = st.empty()
 
         # Custom loading spinner HTML
         spinner_placeholder.markdown("""
@@ -103,7 +107,7 @@ if uploaded_file:
                 <p style="margin-top:16px;font-size:14px;color:#555;">Initializing the scraper...</p>
             </div>
             <style>
-            .st-b7 {
+            .st-b7{
                 background-color:white !important;
                 box-shadow:0px 0px 1px black;
             }
@@ -130,6 +134,7 @@ if uploaded_file:
         async def scrape_and_display():
             all_results = []
             async for update in run_scraper_async(urls, spinner_placeholder):
+                # Custom loading spinner HTML
                 progress_bar.progress(update["progress"])
                 status_placeholder.markdown(f"""
                     **Progress:** {update["scraped"]} / {len(urls)}  
@@ -155,4 +160,3 @@ if uploaded_file:
             )
 
         asyncio.run(scrape_and_display())
-
