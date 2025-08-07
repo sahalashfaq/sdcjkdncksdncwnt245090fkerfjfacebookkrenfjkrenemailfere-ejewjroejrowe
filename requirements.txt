@@ -1,4 +1,4 @@
-selenium
-webdriver-manager
+streamlit
 pandas
-playwright
+selenium
+chromedriver-autoinstaller
