@@ -51,7 +51,7 @@ async def run_scraper_async(urls, spinner_placeholder):
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument(f"--user-data-dir={temp_dir}")
     driver = webdriver.Chrome(options=chrome_options)
-    return driver
+    # return driver
 
     loop = asyncio.get_event_loop()
     executor = ThreadPoolExecutor(max_workers=3)
