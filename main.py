@@ -6,7 +6,10 @@ import time
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from concurrent.futures import ThreadPoolExecutor
-import undetected_chromedriver as uc
+import chromedriver_autoinstaller
+import tempfile
+temp_dir = tempfile.mkdtemp()
+chromedriver_autoinstaller.install(path=temp_dir)
 
 
 # ----------------- Set Page Config First 
@@ -42,13 +45,13 @@ def scrape_emails_from_url(driver, url):
         return [{"URL": url, "Email": "Error fetching"}]
 
 async def run_scraper_async(urls, spinner_placeholder):
-    import undetected_chromedriver as uc
-
-    options = uc.ChromeOptions()
-    options.add_argument("--headless")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    driver = uc.Chrome(options=options, headless=True)
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument(f"--user-data-dir={temp_dir}")
+    driver = webdriver.Chrome(options=chrome_options)
+    # return driver
 
     loop = asyncio.get_event_loop()
     executor = ThreadPoolExecutor(max_workers=3)
@@ -80,7 +83,6 @@ async def run_scraper_async(urls, spinner_placeholder):
         }
 
     driver.quit()
-
 
 # ----------------- File Upload UI --------------------
 uploaded_file = st.file_uploader("Upload CSV or XLSX file containing Facebook URLs", type=["csv", "xlsx"])
@@ -163,5 +165,3 @@ if uploaded_file:
             )
 
         asyncio.run(scrape_and_display())
-
-
