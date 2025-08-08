@@ -3,17 +3,11 @@ import pandas as pd
 import re
 import asyncio
 import time
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
 from concurrent.futures import ThreadPoolExecutor
-import chromedriver_autoinstaller
+import undetected_chromedriver as uc
 import tempfile
-temp_dir = tempfile.mkdtemp()
-chromedriver_autoinstaller.install(path=temp_dir)
 
-
-# ----------------- Set Page Config First 
-# --------------------
+# ----------------- Set Page Config First --------------------
 st.set_page_config(layout="centered")
 
 # ----------------- Custom CSS Loader --------------------
@@ -21,7 +15,7 @@ def local_css(file_name):
     with open(file_name) as f:
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
-local_css("style.css")
+local_css("style.css")  # Ensure style.css exists or comment this line out
 
 # ----------------- Initialize Session State --------------------
 if "total_scraped" not in st.session_state:
@@ -29,11 +23,23 @@ if "total_scraped" not in st.session_state:
 if "estimated_time" not in st.session_state:
     st.session_state.estimated_time = "0 min"
 
+# ----------------- Chrome Driver Factory --------------------
+def get_driver():
+    options = uc.ChromeOptions()
+    options.add_argument("--headless")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
+    return uc.Chrome(options=options)
+
 # ----------------- Scraper Logic --------------------
-def scrape_emails_from_url(driver, url):
+def scrape_emails_from_url(url):
     try:
+        driver = get_driver()
         driver.get(url)
         html = driver.page_source
+        driver.quit()
+
         emails = re.findall(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+", html)
         emails = list(set(emails))
         return (
@@ -45,14 +51,6 @@ def scrape_emails_from_url(driver, url):
         return [{"URL": url, "Email": "Error fetching"}]
 
 async def run_scraper_async(urls, spinner_placeholder):
-    chrome_options = Options()
-    chrome_options.add_argument("--headless")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument(f"--user-data-dir={temp_dir}")
-    driver = webdriver.Chrome(options=chrome_options)
-    # return driver
-
     loop = asyncio.get_event_loop()
     executor = ThreadPoolExecutor(max_workers=3)
 
@@ -61,7 +59,7 @@ async def run_scraper_async(urls, spinner_placeholder):
 
     total = len(urls)
     for i, url in enumerate(urls):
-        row_result = await loop.run_in_executor(executor, scrape_emails_from_url, driver, url)
+        row_result = await loop.run_in_executor(executor, scrape_emails_from_url, url)
         results.extend(row_result)
         st.session_state.total_scraped += 1
 
@@ -81,8 +79,6 @@ async def run_scraper_async(urls, spinner_placeholder):
             "estimated_time": st.session_state.estimated_time,
             "current_data": list(results),
         }
-
-    driver.quit()
 
 # ----------------- File Upload UI --------------------
 uploaded_file = st.file_uploader("Upload CSV or XLSX file containing Facebook URLs", type=["csv", "xlsx"])
@@ -139,7 +135,6 @@ if uploaded_file:
         async def scrape_and_display():
             all_results = []
             async for update in run_scraper_async(urls, spinner_placeholder):
-                # Custom loading spinner HTML
                 progress_bar.progress(update["progress"])
                 status_placeholder.markdown(f"""
                     **Progress:** {update["scraped"]} / {len(urls)}  
