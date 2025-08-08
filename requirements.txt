@@ -2,3 +2,4 @@ streamlit
 pandas
 selenium
 chromedriver-autoinstaller
+undetected-chromedriver
