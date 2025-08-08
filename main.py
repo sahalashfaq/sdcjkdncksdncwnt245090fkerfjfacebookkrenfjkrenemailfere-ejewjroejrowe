@@ -3,26 +3,55 @@ import pandas as pd
 import re
 import asyncio
 import time
+import os
+import zipfile
+import urllib.request
+import subprocess
+import tempfile
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 from concurrent.futures import ThreadPoolExecutor
-import chromedriver_autoinstaller
-import tempfile
-import chromedriver_binary  # This will configure the path automatically
+
+# ----------------- Setup Temporary Directory --------------------
 temp_dir = tempfile.mkdtemp()
-chromedriver_autoinstaller.install(path=temp_dir)
-# ----------------- Set Page Config First 
-# --------------------
+
+# ----------------- Install Chrome & Driver --------------------
+def install_chrome_driver():
+    os.system("apt-get update")
+    os.system("apt-get install -y wget unzip curl")
+    os.system("wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb")
+    os.system("dpkg -i google-chrome-stable_current_amd64.deb || apt-get -fy install")
+
+    # Get Chrome version
+    chrome_version = subprocess.check_output(
+        '/opt/google/chrome/google-chrome --version', shell=True
+    ).decode("utf-8").strip().split()[-1]
+    major_version = chrome_version.split(".")[0]
+
+    # Download matching ChromeDriver
+    url = f"https://chromedriver.storage.googleapis.com/LATEST_RELEASE_{major_version}"
+    driver_version = urllib.request.urlopen(url).read().decode()
+    driver_url = f"https://chromedriver.storage.googleapis.com/{driver_version}/chromedriver_linux64.zip"
+
+    urllib.request.urlretrieve(driver_url, "chromedriver.zip")
+    with zipfile.ZipFile("chromedriver.zip", "r") as zip_ref:
+        zip_ref.extractall(temp_dir)
+
+    os.chmod(f"{temp_dir}/chromedriver", 0o755)
+
+install_chrome_driver()
+
+# ----------------- Page Setup --------------------
 st.set_page_config(layout="centered")
 
-# ----------------- Custom CSS Loader --------------------
 def local_css(file_name):
     with open(file_name) as f:
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 local_css("style.css")
 
-# ----------------- Initialize Session State --------------------
+# ----------------- Session State --------------------
 if "total_scraped" not in st.session_state:
     st.session_state.total_scraped = 0
 if "estimated_time" not in st.session_state:
@@ -35,11 +64,7 @@ def scrape_emails_from_url(driver, url):
         html = driver.page_source
         emails = re.findall(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+", html)
         emails = list(set(emails))
-        return (
-            [{"URL": url, "Email": email} for email in emails]
-            if emails
-            else [{"URL": url, "Email": "No email found"}]
-        )
+        return [{"URL": url, "Email": email} for email in emails] if emails else [{"URL": url, "Email": "No email found"}]
     except Exception:
         return [{"URL": url, "Email": "Error fetching"}]
 
@@ -48,17 +73,18 @@ async def run_scraper_async(urls, spinner_placeholder):
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument(f"--user-data-dir={temp_dir}")
-    driver = webdriver.Chrome(options=chrome_options)
-    # return driver
+    chrome_options.binary_location = "/opt/google/chrome/google-chrome"
+
+    service = Service(executable_path=f"{temp_dir}/chromedriver")
+    driver = webdriver.Chrome(service=service, options=chrome_options)
 
     loop = asyncio.get_event_loop()
     executor = ThreadPoolExecutor(max_workers=3)
 
     start_time = time.time()
     results = []
-
     total = len(urls)
+
     for i, url in enumerate(urls):
         row_result = await loop.run_in_executor(executor, scrape_emails_from_url, driver, url)
         results.extend(row_result)
@@ -92,10 +118,8 @@ if uploaded_file:
             df = pd.read_csv(uploaded_file)
         else:
             df = pd.read_excel(uploaded_file)
-
         url_column = st.selectbox("Select the column containing Facebook URLs", df.columns)
         urls = df[url_column].dropna().unique().tolist()
-
     except Exception as e:
         st.error(f"Failed to process file: {e}")
         st.stop()
@@ -104,17 +128,13 @@ if uploaded_file:
         spinner_placeholder = st.empty()
         countdown_placeholder = st.empty()
 
-        # Custom loading spinner HTML
         spinner_placeholder.markdown("""
             <div style="display:flex;flex-direction:row;gap:10px;justify-content:flex-start;align-items:center;">
                 <div class="loader"></div>
                 <p style="margin-top:16px;font-size:14px;color:#555;">Initializing the scraper...</p>
             </div>
             <style>
-            .st-b7{
-                background-color:white !important;
-                box-shadow:0px 0px 1px black;
-            }
+            .st-b7{ background-color:white !important; box-shadow:0px 0px 1px black; }
             .loader {
                 border: 5px solid white;
                 box-shadow:0px 0px 2px black;
@@ -138,7 +158,6 @@ if uploaded_file:
         async def scrape_and_display():
             all_results = []
             async for update in run_scraper_async(urls, spinner_placeholder):
-                # Custom loading spinner HTML
                 progress_bar.progress(update["progress"])
                 status_placeholder.markdown(f"""
                     **Progress:** {update["scraped"]} / {len(urls)}  
@@ -150,7 +169,6 @@ if uploaded_file:
 
             st.success("Scraping completed successfully!")
 
-            # Merge and prepare CSV
             emails_df = pd.DataFrame(all_results).drop_duplicates()
             merged_df = df.merge(emails_df, left_on=url_column, right_on="URL", how="left")
             merged_df.drop(columns=["URL"], inplace=True)
@@ -164,5 +182,3 @@ if uploaded_file:
             )
 
         asyncio.run(scrape_and_display())
-
-
