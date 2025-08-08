@@ -23,22 +23,16 @@ def install_chrome_driver():
     os.system("wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb")
     os.system("dpkg -i google-chrome-stable_current_amd64.deb || apt-get -fy install")
 
-    # Get Chrome version
-    chrome_version = subprocess.check_output(
-        '/opt/google/chrome/google-chrome --version', shell=True
-    ).decode("utf-8").strip().split()[-1]
-    major_version = chrome_version.split(".")[0]
-
-    # Download matching ChromeDriver
-    url = f"https://chromedriver.storage.googleapis.com/LATEST_RELEASE_{major_version}"
-    driver_version = urllib.request.urlopen(url).read().decode()
-    driver_url = f"https://chromedriver.storage.googleapis.com/{driver_version}/chromedriver_linux64.zip"
+    # Skip subprocess – just download a known working ChromeDriver version
+    known_driver_version = "124.0.6367.91"  # Compatible with Chrome 124
+    driver_url = f"https://chromedriver.storage.googleapis.com/{known_driver_version}/chromedriver_linux64.zip"
 
     urllib.request.urlretrieve(driver_url, "chromedriver.zip")
     with zipfile.ZipFile("chromedriver.zip", "r") as zip_ref:
         zip_ref.extractall(temp_dir)
 
     os.chmod(f"{temp_dir}/chromedriver", 0o755)
+
 
 install_chrome_driver()
 
@@ -182,3 +176,4 @@ if uploaded_file:
             )
 
         asyncio.run(scrape_and_display())
+
