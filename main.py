@@ -25,7 +25,7 @@ def install_chrome_driver():
 
     # Skip subprocess – just download a known working ChromeDriver version
     known_driver_version = "124.0.6367.91"  # Compatible with Chrome 124
-    driver_url = f"https://chromedriver.storage.googleapis.com/{known_driver_version}/chromedriver_linux64.zip"
+    driver_url = f"https://storage.googleapis.com/chrome-for-testing-public/139.0.7258.66/linux64/chrome-linux64.zip"
 
     urllib.request.urlretrieve(driver_url, "chromedriver.zip")
     with zipfile.ZipFile("chromedriver.zip", "r") as zip_ref:
@@ -176,4 +176,5 @@ if uploaded_file:
             )
 
         asyncio.run(scrape_and_display())
+
 
