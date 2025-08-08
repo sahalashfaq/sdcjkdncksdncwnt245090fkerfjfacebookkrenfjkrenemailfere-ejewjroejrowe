@@ -42,6 +42,8 @@ def scrape_emails_from_url(driver, url):
         return [{"URL": url, "Email": "Error fetching"}]
 
 async def run_scraper_async(urls, spinner_placeholder):
+    import undetected_chromedriver as uc
+
     options = uc.ChromeOptions()
     options.add_argument("--headless")
     options.add_argument("--no-sandbox")
@@ -78,6 +80,7 @@ async def run_scraper_async(urls, spinner_placeholder):
         }
 
     driver.quit()
+
 
 # ----------------- File Upload UI --------------------
 uploaded_file = st.file_uploader("Upload CSV or XLSX file containing Facebook URLs", type=["csv", "xlsx"])
@@ -160,4 +163,5 @@ if uploaded_file:
             )
 
         asyncio.run(scrape_and_display())
+
 
