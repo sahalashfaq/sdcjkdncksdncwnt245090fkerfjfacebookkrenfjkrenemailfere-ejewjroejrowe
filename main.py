@@ -3,36 +3,45 @@ import pandas as pd
 import re
 import asyncio
 import time
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
 from concurrent.futures import ThreadPoolExecutor
-import undetected_chromedriver as uc
 import tempfile
+import os
+import subprocess
 
-# ----------------- Set Page Config First --------------------
+# -------------------- Install Chromium (Streamlit Cloud) --------------------
+CHROME_PATH = "/usr/bin/google-chrome"
+CHROMEDRIVER_PATH = "/usr/bin/chromedriver"
+
+if not os.path.exists(CHROME_PATH):
+    st.info("Installing Chromium...")
+    subprocess.run("apt-get update", shell=True)
+    subprocess.run("apt-get install -y chromium-browser chromium-chromedriver", shell=True)
+
+# -------------------- Page Config --------------------
 st.set_page_config(layout="centered")
 
-# ----------------- Custom CSS Loader --------------------
-def local_css(file_name):
-    with open(file_name) as f:
-        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-
-local_css("style.css")  # Ensure style.css exists or comment this line out
-
-# ----------------- Initialize Session State --------------------
+# -------------------- Session State --------------------
 if "total_scraped" not in st.session_state:
     st.session_state.total_scraped = 0
 if "estimated_time" not in st.session_state:
     st.session_state.estimated_time = "0 min"
 
-# ----------------- Chrome Driver Factory --------------------
+# -------------------- Scraper --------------------
 def get_driver():
-    options = uc.ChromeOptions()
-    options.add_argument("--headless")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-gpu")
-    return uc.Chrome(options=options)
+    chrome_options = Options()
+    chrome_options.binary_location = CHROME_PATH
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-gpu")
 
-# ----------------- Scraper Logic --------------------
+    service = Service(executable_path=CHROMEDRIVER_PATH)
+    driver = webdriver.Chrome(service=service, options=chrome_options)
+    return driver
+
 def scrape_emails_from_url(url):
     try:
         driver = get_driver()
@@ -80,7 +89,7 @@ async def run_scraper_async(urls, spinner_placeholder):
             "current_data": list(results),
         }
 
-# ----------------- File Upload UI --------------------
+# -------------------- UI --------------------
 uploaded_file = st.file_uploader("Upload CSV or XLSX file containing Facebook URLs", type=["csv", "xlsx"])
 
 if uploaded_file:
@@ -99,35 +108,6 @@ if uploaded_file:
 
     if st.button("Start Scraping"):
         spinner_placeholder = st.empty()
-        countdown_placeholder = st.empty()
-
-        # Custom loading spinner HTML
-        spinner_placeholder.markdown("""
-            <div style="display:flex;flex-direction:row;gap:10px;justify-content:flex-start;align-items:center;">
-                <div class="loader"></div>
-                <p style="margin-top:16px;font-size:14px;color:#555;">Initializing the scraper...</p>
-            </div>
-            <style>
-            .st-b7{
-                background-color:white !important;
-                box-shadow:0px 0px 1px black;
-            }
-            .loader {
-                border: 5px solid white;
-                box-shadow:0px 0px 2px black;
-                border-top: 5px solid #FD653D;
-                border-radius: 50%;
-                width: 30px;
-                height: 30px;
-                animation: spin 1s linear infinite;
-            }
-            @keyframes spin {
-                0% { transform: rotate(0deg); }
-                100% { transform: rotate(360deg); }
-            }
-            </style>
-        """, unsafe_allow_html=True)
-
         progress_bar = st.progress(0)
         status_placeholder = st.empty()
         table_placeholder = st.empty()
