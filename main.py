@@ -11,6 +11,12 @@ import tempfile
 temp_dir = tempfile.mkdtemp()
 chromedriver_autoinstaller.install(path=temp_dir)
 
+import os
+
+os.system('apt-get update')
+os.system('apt-get install -y wget gnupg unzip')
+os.system('wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb')
+os.system('apt install -y ./google-chrome-stable_current_amd64.deb')
 
 # ----------------- Set Page Config First 
 # --------------------
@@ -165,3 +171,4 @@ if uploaded_file:
             )
 
         asyncio.run(scrape_and_display())
+
