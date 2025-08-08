@@ -6,10 +6,7 @@ import time
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from concurrent.futures import ThreadPoolExecutor
-import chromedriver_autoinstaller
-import tempfile
-temp_dir = tempfile.mkdtemp()
-chromedriver_autoinstaller.install(path=temp_dir)
+import undetected_chromedriver as uc
 
 
 # ----------------- Set Page Config First 
@@ -45,13 +42,11 @@ def scrape_emails_from_url(driver, url):
         return [{"URL": url, "Email": "Error fetching"}]
 
 async def run_scraper_async(urls, spinner_placeholder):
-    chrome_options = Options()
-    chrome_options.add_argument("--headless")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument(f"--user-data-dir={temp_dir}")
-    driver = webdriver.Chrome(options=chrome_options)
-    # return driver
+    options = uc.ChromeOptions()
+    options.add_argument("--headless")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    driver = uc.Chrome(options=options, headless=True)
 
     loop = asyncio.get_event_loop()
     executor = ThreadPoolExecutor(max_workers=3)
@@ -165,3 +160,4 @@ if uploaded_file:
             )
 
         asyncio.run(scrape_and_display())
+
