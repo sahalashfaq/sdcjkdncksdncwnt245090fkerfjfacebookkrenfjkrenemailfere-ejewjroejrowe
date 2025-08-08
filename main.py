@@ -8,16 +8,9 @@ from selenium.webdriver.chrome.options import Options
 from concurrent.futures import ThreadPoolExecutor
 import chromedriver_autoinstaller
 import tempfile
+import chromedriver_binary  # This will configure the path automatically
 temp_dir = tempfile.mkdtemp()
 chromedriver_autoinstaller.install(path=temp_dir)
-
-import os
-
-os.system('apt-get update')
-os.system('apt-get install -y wget gnupg unzip')
-os.system('wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb')
-os.system('apt install -y ./google-chrome-stable_current_amd64.deb')
-
 # ----------------- Set Page Config First 
 # --------------------
 st.set_page_config(layout="centered")
@@ -171,4 +164,5 @@ if uploaded_file:
             )
 
         asyncio.run(scrape_and_display())
+
 
