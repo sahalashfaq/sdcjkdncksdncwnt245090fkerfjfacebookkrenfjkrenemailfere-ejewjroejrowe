@@ -4,11 +4,7 @@ import re
 import asyncio
 import time
 import os
-import zipfile
-import urllib.request
 import tempfile
-import platform
-import subprocess
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
@@ -21,53 +17,17 @@ def local_css(file_name):
 
 local_css("style.css")
 
-# ----------------- Temporary Directory --------------------
-temp_dir = tempfile.mkdtemp()
+# ----------------- Paths to System Chrome and Driver --------------------
+CHROME_PATH = "/usr/bin/google-chrome"
+CHROMEDRIVER_PATH = "/usr/bin/chromedriver"
 
-# ----------------- ChromeDriver Installer --------------------
-def get_chrome_version():
-    system_os = platform.system().lower()
-    try:
-        if "windows" in system_os:
-            output = subprocess.check_output(
-                r'reg query "HKEY_CURRENT_USER\Software\Google\Chrome\BLBeacon" /v version',
-                shell=True
-            ).decode()
-            return re.search(r"(\d+\.\d+\.\d+\.\d+)", output).group(1)
-        elif "linux" in system_os:
-            output = subprocess.check_output(["google-chrome", "--version"]).decode()
-            return re.search(r"(\d+\.\d+\.\d+\.\d+)", output).group(1)
-        elif "darwin" in system_os:
-            output = subprocess.check_output(
-                ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "--version"]
-            ).decode()
-            return re.search(r"(\d+\.\d+\.\d+\.\d+)", output).group(1)
-    except Exception as e:
-        raise RuntimeError(f"Could not detect Chrome version: {e}")
+if not os.path.exists(CHROME_PATH):
+    st.error(f"Google Chrome not found at {CHROME_PATH}")
+    st.stop()
 
-def install_chrome_driver_hidden():
-    chrome_version = get_chrome_version()
-    system_os = platform.system().lower()
-    base_url = f"https://storage.googleapis.com/chrome-for-testing-public/{chrome_version}"
-
-    if "windows" in system_os:
-        driver_url = f"{base_url}/win64/chromedriver-win64.zip"
-        driver_path = os.path.join(temp_dir, "chromedriver-win64", "chromedriver.exe")
-    elif "linux" in system_os:
-        driver_url = f"{base_url}/linux64/chromedriver-linux64.zip"
-        driver_path = os.path.join(temp_dir, "chromedriver-linux64", "chromedriver")
-    elif "darwin" in system_os:
-        driver_url = f"{base_url}/mac-x64/chromedriver-mac-x64.zip"
-        driver_path = os.path.join(temp_dir, "chromedriver-mac-x64", "chromedriver")
-    else:
-        raise Exception("Unsupported OS")
-
-    zip_path = os.path.join(temp_dir, "chromedriver.zip")
-    urllib.request.urlretrieve(driver_url, zip_path)
-    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-        zip_ref.extractall(temp_dir)
-    os.chmod(driver_path, 0o755)
-    return driver_path
+if not os.path.exists(CHROMEDRIVER_PATH):
+    st.error(f"ChromeDriver not found at {CHROMEDRIVER_PATH}")
+    st.stop()
 
 # ----------------- Scraper Logic --------------------
 def scrape_emails_from_url(driver, url):
@@ -81,13 +41,14 @@ def scrape_emails_from_url(driver, url):
     except Exception:
         return [{"URL": url, "Email": "Error fetching"}]
 
-async def run_scraper_async(urls, driver_path, spinner_placeholder):
+async def run_scraper_async(urls, spinner_placeholder):
     chrome_options = Options()
     chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.binary_location = CHROME_PATH
 
-    service = Service(executable_path=driver_path)
+    service = Service(executable_path=CHROMEDRIVER_PATH)
     driver = webdriver.Chrome(service=service, options=chrome_options)
 
     loop = asyncio.get_event_loop()
@@ -107,7 +68,7 @@ async def run_scraper_async(urls, driver_path, spinner_placeholder):
         est_minutes = round(est_seconds / 60, 1)
 
         if i == 0:
-            spinner_placeholder.empty()  # Remove first spinner when second spinner starts
+            spinner_placeholder.empty()
 
         yield {
             "progress": (i + 1) / total,
@@ -116,6 +77,8 @@ async def run_scraper_async(urls, driver_path, spinner_placeholder):
             "estimated_time": f"{est_minutes} min",
             "current_data": list(results),
         }
+
+    driver.quit()
 
 # ----------------- Streamlit UI --------------------
 st.set_page_config(layout="centered")
@@ -140,31 +103,28 @@ if uploaded_file:
         countdown = 5
         for i in range(countdown, 0, -1):
             first_spinner_placeholder.markdown(
-                f"""
+                """
                 <div style="display:flex;align-items:center;gap:10px;margin:10px 0;">
                     <div class="loader"></div>
                     <p style="margin:0;">Starting process… (approx. 1 or half min)</p>
                 </div>
                 <style>
-                .loader {{
+                .loader {
                     border: 6px solid white;
                     border-top: 6px solid #3498db;
                     border-radius: 50%;
                     width: 30px;
                     height: 30px;
                     animation: spin 1s linear infinite;
-                }}
-                @keyframes spin {{
-                    0% {{ transform: rotate(0deg); }}
-                    100% {{ transform: rotate(360deg); }}
-                }}
+                }
+                @keyframes spin {
+                    0% { transform: rotate(0deg); }
+                    100% { transform: rotate(360deg); }
+                }
                 </style>
                 """, unsafe_allow_html=True
             )
             time.sleep(1)
-
-        # ----------------- Install ChromeDriver silently --------------------
-        driver_path = install_chrome_driver_hidden()
 
         # ----------------- Second Spinner + Progress Bar --------------------
         second_spinner_placeholder = st.empty()
@@ -199,7 +159,7 @@ if uploaded_file:
         async def scrape_and_display():
             start_scrape_time = time.time()
             all_results = []
-            async for update in run_scraper_async(urls, driver_path, first_spinner_placeholder):
+            async for update in run_scraper_async(urls, first_spinner_placeholder):
                 progress_bar.progress(update["progress"])
                 status_placeholder.markdown(
                     f"Progress: {update['scraped']} / {len(urls)}  \n"
