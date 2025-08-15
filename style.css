@@ -62,10 +62,10 @@ section[data-testid="stFileUploaderDropzone"]:has(input[data-testid="stFileUploa
     background: var(--white) !important;
     box-shadow: var(--normal_shaodow);
     padding: 10px 10px !important;
+    padding-right: 10px !important;
     border-radius: 10px !important;
     cursor: pointer;
     margin: 10px 0;
-    height: 75px;
 }
 
 section[data-testid="stFileUploaderDropzone"]:has(input[data-testid="stFileUploaderDropzoneInput"]) button {
@@ -98,6 +98,8 @@ section[data-testid="stFileUploaderDropzone"]:has(input[data-testid="stFileUploa
     text-align: center;
     padding: 10px;
     border-radius: 10px;
+    margin: 10px;
+    margin-left: -3px;
     background: var(--indigo-color);
 }
 
@@ -247,4 +249,3 @@ li[role="option"] *{
 strong{
     font-weight: 500 !important;
 }
-
