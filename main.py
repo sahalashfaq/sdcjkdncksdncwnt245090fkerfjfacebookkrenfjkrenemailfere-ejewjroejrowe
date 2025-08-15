@@ -4,7 +4,10 @@ import re
 import asyncio
 import time
 import os
+import zipfile
+import urllib.request
 import tempfile
+import shutil
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
@@ -12,21 +15,47 @@ from concurrent.futures import ThreadPoolExecutor
 
 # ----------------- Custom CSS Loader --------------------
 def local_css(file_name):
-    with open(file_name) as f:
-        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+    if os.path.exists(file_name):
+        with open(file_name) as f:
+            st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 local_css("style.css")
 
-# ----------------- Paths to System Chrome and Driver --------------------
-CHROME_PATH = "/usr/bin/google-chrome"
-CHROMEDRIVER_PATH = "/usr/bin/chromedriver"
+# ----------------- Temporary Directory --------------------
+temp_dir = tempfile.mkdtemp()
 
-if not os.path.exists(CHROME_PATH):
-    st.error(f"Google Chrome not found at {CHROME_PATH}")
-    st.stop()
+# ----------------- Try to find Chrome & Driver --------------------
+CHROME_PATH = (
+    shutil.which("google-chrome") or
+    shutil.which("google-chrome-stable") or
+    shutil.which("chromium-browser") or
+    shutil.which("chromium")
+)
 
-if not os.path.exists(CHROMEDRIVER_PATH):
-    st.error(f"ChromeDriver not found at {CHROMEDRIVER_PATH}")
+CHROMEDRIVER_PATH = shutil.which("chromedriver")
+
+# ----------------- ChromeDriver Installer (Fallback) --------------------
+def download_chromedriver():
+    # Default to latest Chrome for Testing (121.0.6167.85 as example — adjust if needed)
+    driver_url = "https://storage.googleapis.com/chrome-for-testing-public/121.0.6167.85/linux64/chromedriver-linux64.zip"
+    zip_path = os.path.join(temp_dir, "chromedriver.zip")
+    urllib.request.urlretrieve(driver_url, zip_path)
+
+    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+        zip_ref.extractall(temp_dir)
+
+    extracted_driver = os.path.join(temp_dir, "chromedriver-linux64", "chromedriver")
+    os.chmod(extracted_driver, 0o755)
+    return extracted_driver
+
+# If ChromeDriver not found, try to download
+if not CHROMEDRIVER_PATH:
+    st.warning("ChromeDriver not found — downloading it...")
+    CHROMEDRIVER_PATH = download_chromedriver()
+
+# Stop if Chrome is not found
+if not CHROME_PATH:
+    st.error("Google Chrome or Chromium browser not found in this environment.")
     st.stop()
 
 # ----------------- Scraper Logic --------------------
