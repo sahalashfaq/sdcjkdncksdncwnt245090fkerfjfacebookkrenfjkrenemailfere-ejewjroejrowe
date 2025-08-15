@@ -11,143 +11,119 @@ import shutil
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 from concurrent.futures import ThreadPoolExecutor
 
-# ------------- Helper to estimate download time -------------
-def estimate_time(size_bytes, speed_mbps=5):
-    """
-    Estimate download time (seconds) given file size in bytes 
-    and speed in megabits per second.
-    """
-    speed_bps = speed_mbps * 1_000_000 / 8  # convert Mbps to bytes/sec
-    return size_bytes / speed_bps
+#  Helper to display loader countdown
+def countdown_loader(seconds=5):
+    placeholder = st.empty()
+    for sec in range(seconds, 0, -1):
+        placeholder.markdown(f"Starting in {sec} seconds…")
+        time.sleep(1)
+    placeholder.empty()
 
-# ------------- Custom CSS Loader ----------------
-def local_css(file_name):
+#  Custom CSS (if provided)
+def local_css(file_name="style.css"):
     if os.path.exists(file_name):
         with open(file_name) as f:
             st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
-local_css("style.css")
+local_css()
 
-# ------------- UI Setup ----------------
 st.set_page_config(layout="centered")
 uploaded_file = st.file_uploader("Upload CSV or XLSX file containing Facebook URLs", type=["csv", "xlsx"])
 if not uploaded_file:
-    st.info("Upload a CSV/XLSX file to begin.")
+    st.info("Please upload your file to proceed.")
     st.stop()
 
 try:
-    df = pd.read_csv(uploaded_file) if uploaded_file.name.lower().endswith(".csv") else pd.read_excel(uploaded_file)
+    if uploaded_file.name.lower().endswith(".csv"):
+        df = pd.read_csv(uploaded_file)
+    else:
+        df = pd.read_excel(uploaded_file)
     url_column = st.selectbox("Select the column containing Facebook URLs", df.columns)
     urls = df[url_column].dropna().unique().tolist()
 except Exception as e:
-    st.error(f"Error reading file: {e}")
+    st.error(f"Error reading uploaded file: {e}")
     st.stop()
 
 if not st.button("Start Scraping"):
     st.stop()
 
-# ------------- Countdown before starting ----------------
-first_spinner = st.empty()
-for i in range(5, 0, -1):
-    first_spinner.markdown(f"Starting in {i} seconds…")
-    time.sleep(1)
-first_spinner.empty()
+countdown_loader(5)
 
-# ------------- Main logic within temp directory ----------------
-with TemporaryDirectory() as temp_dir:
-    CHROME_PATH = (shutil.which("chromium") or shutil.which("chromium-browser") or shutil.which("google-chrome"))
-    CHROMEDRIVER_PATH = shutil.which("chromedriver")
+#  Begin using WebDriver Manager
+with st.spinner("Setting up Selenium WebDriver..."):
+    driver_path = ChromeDriverManager().install()
 
-    # If ChromeDriver missing — estimate download
-    if not CHROMEDRIVER_PATH:
-        st.warning("ChromeDriver not found — preparing to download...")
-        # Prepare URL for download (use latest or specific version)
-        version = "139.0.7258.68"  # Example stable version
-        url = f"https://storage.googleapis.com/chrome-for-testing-public/{version}/linux64/chromedriver-linux64.zip"
-        st.write(f"ChromeDriver size is approximately **7 MB**, typical for this version.")
+async def scrape_async(urls, spinner_placeholder):
+    options = Options()
+    options.add_argument("--headless=new")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
 
-        # Estimate download time assuming 5 Mbps (adjust as needed)
-        est = estimate_time(7 * 1024 * 1024, speed_mbps=5)  # size in bytes
-        st.info(f"Estimated download time at 5 Mbps: **{round(est, 1)} seconds**")
+    service = Service(driver_path)
+    driver = webdriver.Chrome(service=service, options=options)
 
-        # Proceed with download
-        zip_path = os.path.join(temp_dir, "chromedriver.zip")
-        urllib.request.urlretrieve(url, zip_path)
+    loop = asyncio.get_event_loop()
+    executor = ThreadPoolExecutor(max_workers=3)
 
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(temp_dir)
-        extracted = os.path.join(temp_dir, "chromedriver-linux64", "chromedriver")
-        os.chmod(extracted, 0o755)
-        CHROMEDRIVER_PATH = extracted
-        st.success("ChromeDriver downloaded and ready.")
+    results = []
+    start_time = time.time()
 
-    if not CHROME_PATH:
-        st.error("No suitable browser found (chromium or google-chrome). Cannot proceed.")
-        st.stop()
+    for idx, url in enumerate(urls):
+        batch = await loop.run_in_executor(executor, lambda: scrape_emails(driver, url))
+        results.extend(batch)
 
-    # ------------- Scraper Functions -----------------
-    def scrape_emails(driver, url):
-        try:
-            driver.get(url.rstrip("/") + "/about")
-            html = driver.page_source
-            emails = list(set(re.findall(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", html)))
-            return [{"URL": url, "Email": e} for e in emails] or [{"URL": url, "Email": "No email found"}]
-        except Exception:
-            return [{"URL": url, "Email": "Error"}]
+        elapsed = time.time() - start_time
+        remaining = len(urls) - idx - 1
+        eta = round((elapsed / (idx + 1)) * remaining / 60, 1) if idx + 1 else 0
 
-    async def run_scraper(url_list, spinner):
-        options = Options()
-        options.add_argument("--headless=new")
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-        options.binary_location = CHROME_PATH
-        service = Service(executable_path=CHROMEDRIVER_PATH)
-        driver = webdriver.Chrome(service=service, options=options)
+        spinner_placeholder.empty()
+        yield {
+            "progress": (idx + 1) / len(urls),
+            "scraped": idx + 1,
+            "emails_found": sum(1 for item in results if "@" in item["Email"]),
+            "eta": f"{eta} min",
+            "data": results.copy()
+        }
 
-        loop = asyncio.get_event_loop()
-        executor = ThreadPoolExecutor(max_workers=3)
-        results, start_time = [], time.time()
+    driver.quit()
 
-        for idx, u in enumerate(url_list):
-            batch = await loop.run_in_executor(executor, scrape_emails, driver, u)
-            results.extend(batch)
-            elapsed = time.time() - start_time
-            remaining = len(url_list) - idx - 1
-            est = round((elapsed / (idx + 1)) * remaining / 60, 1)
-            spinner.empty()
-            yield {
-                "progress": (idx + 1) / len(url_list),
-                "scraped": idx + 1,
-                "emails_found": len([x for x in results if "@" in x["Email"]]),
-                "eta": f"{est} min",
-                "data": results.copy()
-            }
+def scrape_emails(driver, url):
+    try:
+        driver.get(url.rstrip("/") + "/about")
+        html = driver.page_source
+        emails = list(set(re.findall(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", html)))
+        return [{"URL": url, "Email": e} for e in emails] if emails else [{"URL": url, "Email": "No email found"}]
+    except Exception:
+        return [{"URL": url, "Email": "Error"}]
 
-        driver.quit()
+#  UI Elements for progress
+spinner_placeholder = st.empty()
+progress_bar = st.progress(0)
+status_placeholder = st.empty()
+table_placeholder = st.empty()
 
-    # ------------- Progress UI -----------------
-    second_spinner = st.empty()
-    second_spinner.markdown("Processing…")
-    progress = st.progress(0)
-    status = st.empty()
-    table = st.empty()
+async def orchestrate():
+    start_time = time.time()
+    all_data = []
 
-    async def orchestrate():
-        start = time.time()
-        all_data = []
-        async for update in run_scraper(urls, second_spinner):
-            progress.progress(update["progress"])
-            status.markdown(f"{update['scraped']}/{len(urls)} – Emails found: {update['emails_found']} – ETA: {update['eta']}")
-            table.dataframe(pd.DataFrame(update["data"]))
-            all_data = update["data"]
+    async for update in scrape_async(urls, spinner_placeholder):
+        progress_bar.progress(update["progress"])
+        status_placeholder.markdown(
+            f"Scraped {update['scraped']} of {len(urls)} — "
+            f"Emails found: {update['emails_found']} — ETA: {update['eta']}"
+        )
+        table_placeholder.dataframe(pd.DataFrame(update["data"]))
+        all_data = update["data"]
 
-        second_spinner.empty()
-        st.success(f"Done in {round(time.time() - start, 2)} seconds!")
-        df_emails = pd.DataFrame(all_data).drop_duplicates()
-        final = df.merge(df_emails, left_on=url_column, right_on="URL", how="left").drop(columns=["URL"])
-        st.download_button("Download Results", final.to_csv(index=False).encode("utf-8"),
-                           "scraped_emails.csv", "text/csv")
+    spinner_placeholder.empty()
+    duration = round(time.time() - start_time, 2)
+    st.success(f"Scraping completed in {duration} seconds!")
 
-    asyncio.run(orchestrate())
+    emails_df = pd.DataFrame(all_data).drop_duplicates()
+    merged = df.merge(emails_df, left_on=url_column, right_on="URL", how="left").drop(columns=["URL"])
+    st.download_button("Download Results", merged.to_csv(index=False).encode("utf-8"), "emails.csv", "text/csv")
+
+asyncio.run(orchestrate())
