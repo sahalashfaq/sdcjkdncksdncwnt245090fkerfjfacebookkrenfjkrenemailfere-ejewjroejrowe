@@ -117,13 +117,23 @@ async def scrape_and_display():
         results = []
         progress = st.progress(0)
 
-        async for i, result in enumerate(run_scraper_async(urls)):
+        total = len(urls)
+        i = 0
+        async for result in run_scraper_async(urls):
             results.append(result)
-            progress.progress((i + 1) / len(urls))
+            i += 1
+            progress.progress(i / total)
             st.write(result)
 
         results_df = pd.DataFrame(results)
-        st.download_button("Download Results CSV", results_df.to_csv(index=False), "results.csv", "text/csv")
+        st.download_button(
+            "Download Results CSV",
+            results_df.to_csv(index=False),
+            "results.csv",
+            "text/csv"
+        )
+
 
 if __name__ == "__main__":
     asyncio.run(scrape_and_display())
+
