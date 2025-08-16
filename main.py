@@ -24,13 +24,7 @@ local_css("style.css")
 # ----------------- ChromeDriver Setup --------------------
 def get_chrome_driver():
     chrome_options = Options()
-    chrome_options.add_argument("--headless=new")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-    chrome_options.add_argument("--disable-extensions")
-    chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--log-level=3")
+    chrome_options.add_argument("--headless=new")  # Only headless mode
 
     service = Service("/usr/bin/chromedriver")  # Update path if needed
     driver = webdriver.Chrome(service=service, options=chrome_options)
@@ -116,7 +110,7 @@ if uploaded_file:
             first_spinner_placeholder.markdown(f"<p>Starting in {i}...</p>", unsafe_allow_html=True)
             time.sleep(1)
 
-        driver = get_chrome_driver()  # ChromeDriver check happens here
+        driver = get_chrome_driver()  # ChromeDriver check
 
         second_spinner_placeholder = st.empty()
         second_spinner_placeholder.markdown("<p>Processing…</p>", unsafe_allow_html=True)
