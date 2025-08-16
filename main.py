@@ -6,6 +6,9 @@ import time
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from concurrent.futures import ThreadPoolExecutor
 
 # ----------------- Custom CSS Loader --------------------
@@ -21,13 +24,20 @@ local_css("style.css")
 # ----------------- ChromeDriver Setup --------------------
 def get_chrome_driver():
     chrome_options = Options()
-    chrome_options.add_argument("--headless=new")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--headless=new")  # Only headless mode
 
-    # On Streamlit Cloud, chromium and chromedriver will be in /usr/bin
-    service = Service("/usr/bin/chromedriver")
+    service = Service("/usr/bin/chromedriver")  # Update path if needed
     driver = webdriver.Chrome(service=service, options=chrome_options)
+
+    # ChromeDriver test
+    try:
+        version = driver.capabilities.get("browserVersion") or driver.capabilities.get("version")
+        st.info(f"ChromeDriver initialized successfully! Chrome version: {version}")
+    except Exception as e:
+        st.error(f"ChromeDriver failed to start: {e}")
+        driver.quit()
+        st.stop()
+
     return driver
 
 # ----------------- Scraper Logic --------------------
@@ -35,6 +45,14 @@ def scrape_emails_from_url(driver, url):
     about_url = url.rstrip("/") + "/about"
     try:
         driver.get(about_url)
+        # Wait for page to load fully (max 5 seconds)
+        try:
+            WebDriverWait(driver, 5).until(
+                EC.presence_of_element_located((By.TAG_NAME, "body"))
+            )
+        except:
+            pass  # Continue even if timeout
+
         html = driver.page_source
         emails = re.findall(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+", html)
         emails = list(set(emails))
@@ -45,7 +63,6 @@ def scrape_emails_from_url(driver, url):
 async def run_scraper_async(urls, driver, spinner_placeholder):
     loop = asyncio.get_event_loop()
     executor = ThreadPoolExecutor(max_workers=3)
-
     start_time = time.time()
     results = []
     total = len(urls)
@@ -56,7 +73,7 @@ async def run_scraper_async(urls, driver, spinner_placeholder):
 
         elapsed = time.time() - start_time
         remaining = total - (i + 1)
-        est_seconds = (elapsed / (i + 1)) * remaining
+        est_seconds = (elapsed / (i + 1)) * remaining if i + 1 > 0 else 0
         est_minutes = round(est_seconds / 60, 1)
 
         if i == 0:
@@ -73,17 +90,14 @@ async def run_scraper_async(urls, driver, spinner_placeholder):
     driver.quit()
 
 # ----------------- Streamlit UI --------------------
-st.set_page_config(layout="centered")
-st.title("📧 Facebook Email Scraper")
+st.set_page_config(page_title="Facebook Email Scraper", layout="centered")
+st.title("Facebook Email Scraper Tool")
 
 uploaded_file = st.file_uploader("Upload CSV or XLSX file containing Facebook URLs", type=["csv", "xlsx"])
 
 if uploaded_file:
     try:
-        if uploaded_file.name.endswith(".csv"):
-            df = pd.read_csv(uploaded_file)
-        else:
-            df = pd.read_excel(uploaded_file)
+        df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith(".csv") else pd.read_excel(uploaded_file)
         url_column = st.selectbox("Select the column containing Facebook URLs", df.columns)
         urls = df[url_column].dropna().unique().tolist()
     except Exception as e:
@@ -92,57 +106,14 @@ if uploaded_file:
 
     if st.button("Start Scraping"):
         first_spinner_placeholder = st.empty()
-        countdown = 3
-        for i in range(countdown, 0, -1):
-            first_spinner_placeholder.markdown(
-                f"""
-                <div style="display:flex;align-items:center;gap:10px;margin:10px 0;">
-                    <div class="loader"></div>
-                    <p style="margin:0;">Starting process…</p>
-                </div>
-                <style>
-                .loader {{
-                    border: 6px solid white;
-                    border-top: 6px solid #3498db;
-                    border-radius: 50%;
-                    width: 30px;
-                    height: 30px;
-                    animation: spin 1s linear infinite;
-                }}
-                @keyframes spin {{
-                    0% {{ transform: rotate(0deg); }}
-                    100% {{ transform: rotate(360deg); }}
-                }}
-                </style>
-                """, unsafe_allow_html=True
-            )
+        for i in range(3, 0, -1):
+            first_spinner_placeholder.markdown(f"<p>Starting in {i}...</p>", unsafe_allow_html=True)
             time.sleep(1)
 
-        driver = get_chrome_driver()
+        driver = get_chrome_driver()  # ChromeDriver check
 
         second_spinner_placeholder = st.empty()
-        second_spinner_placeholder.markdown(
-            """
-            <div style="display:flex;align-items:center;gap:10px;margin:10px 0;">
-                <div class="loader"></div>
-                <p style="margin:0;">Processing…</p>
-            </div>
-            <style>
-            .loader {
-                border: 6px solid white;
-                border-top: 6px solid #3498db;
-                border-radius: 50%;
-                width: 30px;
-                height: 30px;
-                animation: spin 1s linear infinite;
-            }
-            @keyframes spin {
-                0% { transform: rotate(0deg); }
-                100% { transform: rotate(360deg); }
-            }
-            </style>
-            """, unsafe_allow_html=True
-        )
+        second_spinner_placeholder.markdown("<p>Processing…</p>", unsafe_allow_html=True)
 
         progress_bar = st.progress(0)
         status_placeholder = st.empty()
