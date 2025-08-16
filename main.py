@@ -3,72 +3,96 @@ import pandas as pd
 import re
 import asyncio
 import time
-import random
-import html
+import os
+import zipfile
+import urllib.request
+import tempfile
+import platform
+import subprocess
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 from concurrent.futures import ThreadPoolExecutor
 
 # ----------------- Custom CSS Loader --------------------
 def local_css(file_name):
-    try:
-        with open(file_name) as f:
-            st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-    except FileNotFoundError:
-        pass
+    with open(file_name) as f:
+        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 local_css("style.css")
 
-# ----------------- ChromeDriver Setup --------------------
-def get_chrome_driver():
-    chrome_options = Options()
-    chrome_options.add_argument("--headless=new")  # can comment out for debugging
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--disable-blink-features=AutomationControlled")  # reduce headless detection
-    chrome_options.add_argument("--disable-extensions")
-    chrome_options.add_argument("--disable-gpu")
+# ----------------- Temporary Directory --------------------
+temp_dir = tempfile.mkdtemp()
 
-    service = Service("/usr/bin/chromedriver")  # adjust path if needed
-    driver = webdriver.Chrome(service=service, options=chrome_options)
-    return driver
+# ----------------- ChromeDriver Installer --------------------
+def get_chrome_version():
+    system_os = platform.system().lower()
+    try:
+        if "windows" in system_os:
+            output = subprocess.check_output(
+                r'reg query "HKEY_CURRENT_USER\Software\Google\Chrome\BLBeacon" /v version',
+                shell=True
+            ).decode()
+            return re.search(r"(\d+\.\d+\.\d+\.\d+)", output).group(1)
+        elif "linux" in system_os:
+            output = subprocess.check_output(["google-chrome", "--version"]).decode()
+            return re.search(r"(\d+\.\d+\.\d+\.\d+)", output).group(1)
+        elif "darwin" in system_os:
+            output = subprocess.check_output(
+                ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "--version"]
+            ).decode()
+            return re.search(r"(\d+\.\d+\.\d+\.\d+)", output).group(1)
+    except Exception as e:
+        raise RuntimeError(f"Could not detect Chrome version: {e}")
+
+def install_chrome_driver_hidden():
+    chrome_version = get_chrome_version()
+    system_os = platform.system().lower()
+    base_url = f"https://storage.googleapis.com/chrome-for-testing-public/{chrome_version}"
+
+    if "windows" in system_os:
+        driver_url = f"{base_url}/win64/chromedriver-win64.zip"
+        driver_path = os.path.join(temp_dir, "chromedriver-win64", "chromedriver.exe")
+    elif "linux" in system_os:
+        driver_url = f"{base_url}/linux64/chromedriver-linux64.zip"
+        driver_path = os.path.join(temp_dir, "chromedriver-linux64", "chromedriver")
+    elif "darwin" in system_os:
+        driver_url = f"{base_url}/mac-x64/chromedriver-mac-x64.zip"
+        driver_path = os.path.join(temp_dir, "chromedriver-mac-x64", "chromedriver")
+    else:
+        raise Exception("Unsupported OS")
+
+    zip_path = os.path.join(temp_dir, "chromedriver.zip")
+    urllib.request.urlretrieve(driver_url, zip_path)
+    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+        zip_ref.extractall(temp_dir)
+    os.chmod(driver_path, 0o755)
+    return driver_path
 
 # ----------------- Scraper Logic --------------------
 def scrape_emails_from_url(driver, url):
-    urls_to_try = [url.rstrip("/") + "/about", url.rstrip("/") + "/contact", url.rstrip("/") + "/info"]
-    for about_url in urls_to_try:
-        try:
-            driver.get(about_url)
-            # Wait for page body to load
-            WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.TAG_NAME, "body"))
-            )
-            # Small random delay to ensure JS content loads
-            time.sleep(random.uniform(1.5, 3.5))
+    about_url = url.rstrip("/") + "/about"
+    try:
+        driver.get(about_url)
+        html = driver.page_source
+        emails = re.findall(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+", html)
+        emails = list(set(emails))
+        return [{"URL": url, "Email": email} for email in emails] if emails else [{"URL": url, "Email": "No email found"}]
+    except Exception:
+        return [{"URL": url, "Email": "Error fetching"}]
 
-            html_content = html.unescape(driver.page_source)  # decode HTML entities
-            # Extract emails
-            emails = re.findall(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+", html_content)
-            emails = list(set(emails))
+async def run_scraper_async(urls, driver_path, spinner_placeholder):
+    chrome_options = Options()
+    chrome_options.add_argument("--headless=new")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
 
-            if emails:
-                return [{"URL": url, "Email": email} for email in emails]
+    service = Service(executable_path=driver_path)
+    driver = webdriver.Chrome(service=service, options=chrome_options)
 
-        except Exception as e:
-            # Save failing HTML for debug
-            with open(f"debug_{url.split('/')[-1]}.html", "w", encoding="utf-8") as f:
-                f.write(driver.page_source)
-            continue
-
-    return [{"URL": url, "Email": "No email found"}]
-
-async def run_scraper_async(urls, driver, spinner_placeholder):
     loop = asyncio.get_event_loop()
-    executor = ThreadPoolExecutor(max_workers=1)  # safer with one driver
+    executor = ThreadPoolExecutor(max_workers=3)
+
     start_time = time.time()
     results = []
     total = len(urls)
@@ -83,7 +107,7 @@ async def run_scraper_async(urls, driver, spinner_placeholder):
         est_minutes = round(est_seconds / 60, 1)
 
         if i == 0:
-            spinner_placeholder.empty()
+            spinner_placeholder.empty()  # Remove first spinner when second spinner starts
 
         yield {
             "progress": (i + 1) / total,
@@ -93,11 +117,8 @@ async def run_scraper_async(urls, driver, spinner_placeholder):
             "current_data": list(results),
         }
 
-    driver.quit()
-
 # ----------------- Streamlit UI --------------------
 st.set_page_config(layout="centered")
-
 uploaded_file = st.file_uploader("Upload CSV or XLSX file containing Facebook URLs", type=["csv", "xlsx"])
 
 if uploaded_file:
@@ -113,14 +134,16 @@ if uploaded_file:
         st.stop()
 
     if st.button("Start Scraping"):
+
+        # ----------------- First Spinner --------------------
         first_spinner_placeholder = st.empty()
-        countdown = 3
+        countdown = 5
         for i in range(countdown, 0, -1):
             first_spinner_placeholder.markdown(
                 f"""
                 <div style="display:flex;align-items:center;gap:10px;margin:10px 0;">
                     <div class="loader"></div>
-                    <p style="margin:0;">Starting process… {i}</p>
+                    <p style="margin:0;">Starting process… (approx. 1 or half min)</p>
                 </div>
                 <style>
                 .loader {{
@@ -140,8 +163,10 @@ if uploaded_file:
             )
             time.sleep(1)
 
-        driver = get_chrome_driver()
+        # ----------------- Install ChromeDriver silently --------------------
+        driver_path = install_chrome_driver_hidden()
 
+        # ----------------- Second Spinner + Progress Bar --------------------
         second_spinner_placeholder = st.empty()
         second_spinner_placeholder.markdown(
             """
@@ -170,10 +195,11 @@ if uploaded_file:
         status_placeholder = st.empty()
         table_placeholder = st.empty()
 
+        # ----------------- Run Scraper --------------------
         async def scrape_and_display():
             start_scrape_time = time.time()
             all_results = []
-            async for update in run_scraper_async(urls, driver, first_spinner_placeholder):
+            async for update in run_scraper_async(urls, driver_path, first_spinner_placeholder):
                 progress_bar.progress(update["progress"])
                 status_placeholder.markdown(
                     f"Progress: {update['scraped']} / {len(urls)}  \n"
@@ -194,7 +220,7 @@ if uploaded_file:
             st.download_button(
                 "Download Scraped Emails",
                 csv_data,
-                "Scraped_Emails.csv",
+                "Scraped_by_SeekGps.csv",
                 "text/csv"
             )
 
