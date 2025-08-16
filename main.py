@@ -8,7 +8,6 @@ import platform
 import subprocess
 import zipfile
 import urllib.request
-import json
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
@@ -28,25 +27,21 @@ def install_chrome_driver_hidden():
     base_driver_dir = os.path.join(os.getcwd(), "drivers")
     os.makedirs(base_driver_dir, exist_ok=True)
 
-    # Decide binary name based on OS
+    # Decide binary name
     if "windows" in system_os:
         driver_name = "chromedriver.exe"
-    elif "linux" in system_os:
-        driver_name = "chromedriver"
-    elif "darwin" in system_os:
-        driver_name = "chromedriver"
     else:
-        raise Exception("Unsupported OS")
+        driver_name = "chromedriver"
 
     driver_path = os.path.join(base_driver_dir, driver_name)
 
-    # If already exists, return it
     if os.path.exists(driver_path):
         return driver_path
 
     st.info("Downloading ChromeDriver... Please wait ⏳")
 
-    # Detect local Chrome major version
+    # Try to detect installed Chrome version
+    chrome_version = None
     try:
         if "windows" in system_os:
             version = subprocess.check_output(
@@ -62,28 +57,34 @@ def install_chrome_driver_hidden():
                 ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "--version"]
             ).decode("utf-8")
             chrome_version = re.search(r"(\d+)\.", version).group(1)
-    except Exception as e:
-        raise Exception("Could not detect Chrome version. Please install Chrome first.") from e
+    except Exception:
+        st.warning("⚠️ Could not detect Chrome version. Falling back to latest stable driver.")
 
-    # Get latest matching ChromeDriver version
-    latest_url = f"https://googlechromelabs.github.io/chrome-for-testing/LATEST_RELEASE_{chrome_version}"
+    # Choose latest release endpoint
+    if chrome_version:
+        latest_url = f"https://googlechromelabs.github.io/chrome-for-testing/LATEST_RELEASE_{chrome_version}"
+    else:
+        latest_url = "https://googlechromelabs.github.io/chrome-for-testing/LATEST_RELEASE_STABLE"
+
     with urllib.request.urlopen(latest_url) as response:
         latest_version = response.read().decode("utf-8").strip()
 
-    # Build download URL based on OS
+    # Build download URL
     if "windows" in system_os:
         zip_url = f"https://storage.googleapis.com/chrome-for-testing-public/{latest_version}/win64/chromedriver-win64.zip"
     elif "linux" in system_os:
         zip_url = f"https://storage.googleapis.com/chrome-for-testing-public/{latest_version}/linux64/chromedriver-linux64.zip"
     elif "darwin" in system_os:
         zip_url = f"https://storage.googleapis.com/chrome-for-testing-public/{latest_version}/mac-x64/chromedriver-mac-x64.zip"
+    else:
+        raise Exception("Unsupported OS")
 
     zip_path = os.path.join(base_driver_dir, "chromedriver.zip")
 
     # Download zip
     urllib.request.urlretrieve(zip_url, zip_path)
 
-    # Extract chromedriver binary
+    # Extract chromedriver
     with zipfile.ZipFile(zip_path, "r") as zip_ref:
         for file in zip_ref.namelist():
             if driver_name in file:
