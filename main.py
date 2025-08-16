@@ -24,7 +24,7 @@ local_css("style.css")
 # ----------------- ChromeDriver Setup --------------------
 def get_chrome_driver():
     chrome_options = Options()
-    chrome_options.add_argument("--headless=new")  # Only headless mode
+    # chrome_options.add_argument("--headless=new")  # Only headless mode
 
     service = Service("/usr/bin/chromedriver")  # Update path if needed
     driver = webdriver.Chrome(service=service, options=chrome_options)
@@ -146,4 +146,5 @@ if uploaded_file:
             )
 
         asyncio.run(scrape_and_display())
+
 
