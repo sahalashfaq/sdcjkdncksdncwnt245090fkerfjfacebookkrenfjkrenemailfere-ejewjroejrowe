@@ -6,6 +6,9 @@ import time
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from concurrent.futures import ThreadPoolExecutor
 
 # ----------------- Custom CSS Loader --------------------
@@ -24,6 +27,11 @@ def get_chrome_driver():
     chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument(
+        "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/115.0.0.0 Safari/537.36"
+    )
 
     # On Streamlit Cloud, chromium and chromedriver will be in /usr/bin
     service = Service("/usr/bin/chromedriver")
@@ -35,12 +43,29 @@ def scrape_emails_from_url(driver, url):
     about_url = url.rstrip("/") + "/about"
     try:
         driver.get(about_url)
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.TAG_NAME, "body"))
+        )
         html = driver.page_source
+
+        # Facebook-specific errors
+        if "This content isn't available at the moment" in html:
+            return [{"URL": url, "Email": "Page does not exist or is unavailable"}]
+        if "You must log in to continue" in html:
+            return [{"URL": url, "Email": "Login required to view this page"}]
+        if "Sorry, this page isn't available" in html:
+            return [{"URL": url, "Email": "Page not found"}]
+
+        # Extract emails
         emails = re.findall(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+", html)
         emails = list(set(emails))
-        return [{"URL": url, "Email": email} for email in emails] if emails else [{"URL": url, "Email": "No email found"}]
-    except Exception:
-        return [{"URL": url, "Email": "Error fetching"}]
+        if emails:
+            return [{"URL": url, "Email": email} for email in emails]
+        else:
+            return [{"URL": url, "Email": "No email found"}]
+
+    except Exception as e:
+        return [{"URL": url, "Email": f"Error fetching page: {str(e)}"}]
 
 async def run_scraper_async(urls, driver, spinner_placeholder):
     loop = asyncio.get_event_loop()
@@ -74,6 +99,7 @@ async def run_scraper_async(urls, driver, spinner_placeholder):
 
 # ----------------- Streamlit UI --------------------
 st.set_page_config(layout="centered")
+st.title("📧 Facebook Email Scraper")
 
 uploaded_file = st.file_uploader("Upload CSV or XLSX file containing Facebook URLs", type=["csv", "xlsx"])
 
@@ -176,4 +202,3 @@ if uploaded_file:
             )
 
         asyncio.run(scrape_and_display())
-
