@@ -24,14 +24,17 @@ def get_chrome_driver():
     chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+    chrome_options.add_argument("--disable-extensions")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--log-level=3")
 
-    service = Service("/usr/bin/chromedriver")  # Adjust path if needed
+    service = Service("/usr/bin/chromedriver")  # Update path if needed
     driver = webdriver.Chrome(service=service, options=chrome_options)
     return driver
 
 # ----------------- Scraper Logic --------------------
 def scrape_emails_from_url(driver, url):
-    # Ensure '/about' is appended to every URL
     about_url = url.rstrip("/") + "/about"
     try:
         driver.get(about_url)
@@ -45,7 +48,6 @@ def scrape_emails_from_url(driver, url):
 async def run_scraper_async(urls, driver, spinner_placeholder):
     loop = asyncio.get_event_loop()
     executor = ThreadPoolExecutor(max_workers=3)
-
     start_time = time.time()
     results = []
     total = len(urls)
@@ -56,7 +58,7 @@ async def run_scraper_async(urls, driver, spinner_placeholder):
 
         elapsed = time.time() - start_time
         remaining = total - (i + 1)
-        est_seconds = (elapsed / (i + 1)) * remaining
+        est_seconds = (elapsed / (i + 1)) * remaining if i + 1 > 0 else 0
         est_minutes = round(est_seconds / 60, 1)
 
         if i == 0:
@@ -73,7 +75,9 @@ async def run_scraper_async(urls, driver, spinner_placeholder):
     driver.quit()
 
 # ----------------- Streamlit UI --------------------
-st.set_page_config(layout="centered")
+st.set_page_config(page_title="Facebook Email Scraper", layout="centered")
+st.title("Facebook Email Scraper Tool")
+
 uploaded_file = st.file_uploader("Upload CSV or XLSX file containing Facebook URLs", type=["csv", "xlsx"])
 
 if uploaded_file:
@@ -87,6 +91,7 @@ if uploaded_file:
 
     if st.button("Start Scraping"):
         first_spinner_placeholder = st.empty()
+        # Countdown before starting
         for i in range(3, 0, -1):
             first_spinner_placeholder.markdown(f"<p>Starting in {i}...</p>", unsafe_allow_html=True)
             time.sleep(1)
@@ -102,6 +107,7 @@ if uploaded_file:
 
         async def scrape_and_display():
             start_scrape_time = time.time()
+            all_results = []
             async for update in run_scraper_async(urls, driver, first_spinner_placeholder):
                 progress_bar.progress(update["progress"])
                 status_placeholder.markdown(
@@ -110,12 +116,13 @@ if uploaded_file:
                     f"Estimated Time Left: {update['estimated_time']}"
                 )
                 table_placeholder.dataframe(pd.DataFrame(update["current_data"]))
+                all_results = update["current_data"]
 
             total_scrape_time = round(time.time() - start_scrape_time, 2)
             second_spinner_placeholder.empty()
             st.success(f"Scraping completed in {total_scrape_time} seconds!")
 
-            emails_df = pd.DataFrame(update["current_data"]).drop_duplicates()
+            emails_df = pd.DataFrame(all_results).drop_duplicates()
             merged_df = df.merge(emails_df, left_on=url_column, right_on="URL", how="left").drop(columns=["URL"])
             csv_data = merged_df.to_csv(index=False).encode("utf-8")
 
