@@ -76,7 +76,6 @@ async def run_scraper_async(urls, driver, spinner_placeholder):
 
 # ----------------- Streamlit UI --------------------
 st.set_page_config(page_title="Facebook Email Scraper", layout="centered")
-st.title("Facebook Email Scraper Tool")
 
 uploaded_file = st.file_uploader("Upload CSV or XLSX file containing Facebook URLs", type=["csv", "xlsx"])
 
@@ -134,3 +133,4 @@ if uploaded_file:
             )
 
         asyncio.run(scrape_and_display())
+
