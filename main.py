@@ -3,12 +3,6 @@ import pandas as pd
 import re
 import asyncio
 import time
-import os
-import zipfile
-import urllib.request
-import tempfile
-import platform
-import subprocess
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
@@ -20,54 +14,6 @@ def local_css(file_name):
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 local_css("style.css")
-
-# ----------------- Temporary Directory --------------------
-temp_dir = tempfile.mkdtemp()
-
-# ----------------- ChromeDriver Installer --------------------
-def get_chrome_version():
-    system_os = platform.system().lower()
-    try:
-        if "windows" in system_os:
-            output = subprocess.check_output(
-                r'reg query "HKEY_CURRENT_USER\Software\Google\Chrome\BLBeacon" /v version',
-                shell=True
-            ).decode()
-            return re.search(r"(\d+\.\d+\.\d+\.\d+)", output).group(1)
-        elif "linux" in system_os:
-            output = subprocess.check_output(["google-chrome", "--version"]).decode()
-            return re.search(r"(\d+\.\d+\.\d+\.\d+)", output).group(1)
-        elif "darwin" in system_os:
-            output = subprocess.check_output(
-                ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "--version"]
-            ).decode()
-            return re.search(r"(\d+\.\d+\.\d+\.\d+)", output).group(1)
-    except Exception as e:
-        raise RuntimeError(f"Could not detect Chrome version: {e}")
-
-def install_chrome_driver_hidden():
-    chrome_version = get_chrome_version()
-    system_os = platform.system().lower()
-    base_url = f"https://storage.googleapis.com/chrome-for-testing-public/{chrome_version}"
-
-    if "windows" in system_os:
-        driver_url = f"{base_url}/win64/chromedriver-win64.zip"
-        driver_path = os.path.join(temp_dir, "chromedriver-win64", "chromedriver.exe")
-    elif "linux" in system_os:
-        driver_url = f"{base_url}/linux64/chromedriver-linux64.zip"
-        driver_path = os.path.join(temp_dir, "chromedriver-linux64", "chromedriver")
-    elif "darwin" in system_os:
-        driver_url = f"{base_url}/mac-x64/chromedriver-mac-x64.zip"
-        driver_path = os.path.join(temp_dir, "chromedriver-mac-x64", "chromedriver")
-    else:
-        raise Exception("Unsupported OS")
-
-    zip_path = os.path.join(temp_dir, "chromedriver.zip")
-    urllib.request.urlretrieve(driver_url, zip_path)
-    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-        zip_ref.extractall(temp_dir)
-    os.chmod(driver_path, 0o755)
-    return driver_path
 
 # ----------------- Scraper Logic --------------------
 def scrape_emails_from_url(driver, url):
@@ -107,7 +53,7 @@ async def run_scraper_async(urls, driver_path, spinner_placeholder):
         est_minutes = round(est_seconds / 60, 1)
 
         if i == 0:
-            spinner_placeholder.empty()  # Remove first spinner when second spinner starts
+            spinner_placeholder.empty()
 
         yield {
             "progress": (i + 1) / total,
@@ -134,7 +80,6 @@ if uploaded_file:
         st.stop()
 
     if st.button("Start Scraping"):
-
         # ----------------- First Spinner --------------------
         first_spinner_placeholder = st.empty()
         countdown = 5
@@ -163,8 +108,8 @@ if uploaded_file:
             )
             time.sleep(1)
 
-        # ----------------- Install ChromeDriver silently --------------------
-        driver_path = install_chrome_driver_hidden()
+        # ----------------- Use Streamlit Cloud's ChromeDriver --------------------
+        driver_path = "/usr/bin/chromedriver"
 
         # ----------------- Second Spinner + Progress Bar --------------------
         second_spinner_placeholder = st.empty()
