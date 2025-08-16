@@ -24,12 +24,9 @@ def get_chrome_driver():
     chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-    chrome_options.add_argument("--disable-extensions")
-    chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--log-level=3")
 
-    service = Service("/usr/bin/chromedriver")  # Update path if needed
+    # On Streamlit Cloud, chromium and chromedriver will be in /usr/bin
+    service = Service("/usr/bin/chromedriver")
     driver = webdriver.Chrome(service=service, options=chrome_options)
     return driver
 
@@ -48,6 +45,7 @@ def scrape_emails_from_url(driver, url):
 async def run_scraper_async(urls, driver, spinner_placeholder):
     loop = asyncio.get_event_loop()
     executor = ThreadPoolExecutor(max_workers=3)
+
     start_time = time.time()
     results = []
     total = len(urls)
@@ -58,7 +56,7 @@ async def run_scraper_async(urls, driver, spinner_placeholder):
 
         elapsed = time.time() - start_time
         remaining = total - (i + 1)
-        est_seconds = (elapsed / (i + 1)) * remaining if i + 1 > 0 else 0
+        est_seconds = (elapsed / (i + 1)) * remaining
         est_minutes = round(est_seconds / 60, 1)
 
         if i == 0:
@@ -75,13 +73,16 @@ async def run_scraper_async(urls, driver, spinner_placeholder):
     driver.quit()
 
 # ----------------- Streamlit UI --------------------
-st.set_page_config(page_title="Facebook Email Scraper", layout="centered")
+st.set_page_config(layout="centered")
 
 uploaded_file = st.file_uploader("Upload CSV or XLSX file containing Facebook URLs", type=["csv", "xlsx"])
 
 if uploaded_file:
     try:
-        df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith(".csv") else pd.read_excel(uploaded_file)
+        if uploaded_file.name.endswith(".csv"):
+            df = pd.read_csv(uploaded_file)
+        else:
+            df = pd.read_excel(uploaded_file)
         url_column = st.selectbox("Select the column containing Facebook URLs", df.columns)
         urls = df[url_column].dropna().unique().tolist()
     except Exception as e:
@@ -90,15 +91,57 @@ if uploaded_file:
 
     if st.button("Start Scraping"):
         first_spinner_placeholder = st.empty()
-        # Countdown before starting
-        for i in range(3, 0, -1):
-            first_spinner_placeholder.markdown(f"<p>Starting in {i}...</p>", unsafe_allow_html=True)
+        countdown = 3
+        for i in range(countdown, 0, -1):
+            first_spinner_placeholder.markdown(
+                f"""
+                <div style="display:flex;align-items:center;gap:10px;margin:10px 0;">
+                    <div class="loader"></div>
+                    <p style="margin:0;">Starting process…</p>
+                </div>
+                <style>
+                .loader {{
+                    border: 6px solid white;
+                    border-top: 6px solid #3498db;
+                    border-radius: 50%;
+                    width: 30px;
+                    height: 30px;
+                    animation: spin 1s linear infinite;
+                }}
+                @keyframes spin {{
+                    0% {{ transform: rotate(0deg); }}
+                    100% {{ transform: rotate(360deg); }}
+                }}
+                </style>
+                """, unsafe_allow_html=True
+            )
             time.sleep(1)
 
         driver = get_chrome_driver()
 
         second_spinner_placeholder = st.empty()
-        second_spinner_placeholder.markdown("<p>Processing…</p>", unsafe_allow_html=True)
+        second_spinner_placeholder.markdown(
+            """
+            <div style="display:flex;align-items:center;gap:10px;margin:10px 0;">
+                <div class="loader"></div>
+                <p style="margin:0;">Processing…</p>
+            </div>
+            <style>
+            .loader {
+                border: 6px solid white;
+                border-top: 6px solid #3498db;
+                border-radius: 50%;
+                width: 30px;
+                height: 30px;
+                animation: spin 1s linear infinite;
+            }
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+            </style>
+            """, unsafe_allow_html=True
+        )
 
         progress_bar = st.progress(0)
         status_placeholder = st.empty()
@@ -133,4 +176,3 @@ if uploaded_file:
             )
 
         asyncio.run(scrape_and_display())
-
