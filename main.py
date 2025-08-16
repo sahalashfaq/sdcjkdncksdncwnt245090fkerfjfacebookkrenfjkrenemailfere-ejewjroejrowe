@@ -6,9 +6,6 @@ import time
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 from concurrent.futures import ThreadPoolExecutor
 
 # ----------------- Custom CSS Loader --------------------
@@ -27,45 +24,23 @@ def get_chrome_driver():
     chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument(
-        "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/115.0.0.0 Safari/537.36"
-    )
 
-    # On Streamlit Cloud, chromium and chromedriver will be in /usr/bin
-    service = Service("/usr/bin/chromedriver")
+    service = Service("/usr/bin/chromedriver")  # Adjust path if needed
     driver = webdriver.Chrome(service=service, options=chrome_options)
     return driver
 
 # ----------------- Scraper Logic --------------------
 def scrape_emails_from_url(driver, url):
+    # Ensure '/about' is appended to every URL
     about_url = url.rstrip("/") + "/about"
     try:
         driver.get(about_url)
-        WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.TAG_NAME, "body"))
-        )
         html = driver.page_source
-
-        # Facebook-specific errors
-        if "This content isn't available at the moment" in html:
-            return [{"URL": url, "Email": "Page does not exist or is unavailable"}]
-        if "You must log in to continue" in html:
-            return [{"URL": url, "Email": "Login required to view this page"}]
-        if "Sorry, this page isn't available" in html:
-            return [{"URL": url, "Email": "Page not found"}]
-
-        # Extract emails
         emails = re.findall(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+", html)
         emails = list(set(emails))
-        if emails:
-            return [{"URL": url, "Email": email} for email in emails]
-        else:
-            return [{"URL": url, "Email": "No email found"}]
-
-    except Exception as e:
-        return [{"URL": url, "Email": f"Error fetching page: {str(e)}"}]
+        return [{"URL": url, "Email": email} for email in emails] if emails else [{"URL": url, "Email": "No email found"}]
+    except Exception:
+        return [{"URL": url, "Email": "Error fetching"}]
 
 async def run_scraper_async(urls, driver, spinner_placeholder):
     loop = asyncio.get_event_loop()
@@ -99,16 +74,11 @@ async def run_scraper_async(urls, driver, spinner_placeholder):
 
 # ----------------- Streamlit UI --------------------
 st.set_page_config(layout="centered")
-st.title("📧 Facebook Email Scraper")
-
 uploaded_file = st.file_uploader("Upload CSV or XLSX file containing Facebook URLs", type=["csv", "xlsx"])
 
 if uploaded_file:
     try:
-        if uploaded_file.name.endswith(".csv"):
-            df = pd.read_csv(uploaded_file)
-        else:
-            df = pd.read_excel(uploaded_file)
+        df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith(".csv") else pd.read_excel(uploaded_file)
         url_column = st.selectbox("Select the column containing Facebook URLs", df.columns)
         urls = df[url_column].dropna().unique().tolist()
     except Exception as e:
@@ -117,57 +87,14 @@ if uploaded_file:
 
     if st.button("Start Scraping"):
         first_spinner_placeholder = st.empty()
-        countdown = 3
-        for i in range(countdown, 0, -1):
-            first_spinner_placeholder.markdown(
-                f"""
-                <div style="display:flex;align-items:center;gap:10px;margin:10px 0;">
-                    <div class="loader"></div>
-                    <p style="margin:0;">Starting process…</p>
-                </div>
-                <style>
-                .loader {{
-                    border: 6px solid white;
-                    border-top: 6px solid #3498db;
-                    border-radius: 50%;
-                    width: 30px;
-                    height: 30px;
-                    animation: spin 1s linear infinite;
-                }}
-                @keyframes spin {{
-                    0% {{ transform: rotate(0deg); }}
-                    100% {{ transform: rotate(360deg); }}
-                }}
-                </style>
-                """, unsafe_allow_html=True
-            )
+        for i in range(3, 0, -1):
+            first_spinner_placeholder.markdown(f"<p>Starting in {i}...</p>", unsafe_allow_html=True)
             time.sleep(1)
 
         driver = get_chrome_driver()
 
         second_spinner_placeholder = st.empty()
-        second_spinner_placeholder.markdown(
-            """
-            <div style="display:flex;align-items:center;gap:10px;margin:10px 0;">
-                <div class="loader"></div>
-                <p style="margin:0;">Processing…</p>
-            </div>
-            <style>
-            .loader {
-                border: 6px solid white;
-                border-top: 6px solid #3498db;
-                border-radius: 50%;
-                width: 30px;
-                height: 30px;
-                animation: spin 1s linear infinite;
-            }
-            @keyframes spin {
-                0% { transform: rotate(0deg); }
-                100% { transform: rotate(360deg); }
-            }
-            </style>
-            """, unsafe_allow_html=True
-        )
+        second_spinner_placeholder.markdown("<p>Processing…</p>", unsafe_allow_html=True)
 
         progress_bar = st.progress(0)
         status_placeholder = st.empty()
@@ -175,7 +102,6 @@ if uploaded_file:
 
         async def scrape_and_display():
             start_scrape_time = time.time()
-            all_results = []
             async for update in run_scraper_async(urls, driver, first_spinner_placeholder):
                 progress_bar.progress(update["progress"])
                 status_placeholder.markdown(
@@ -184,13 +110,12 @@ if uploaded_file:
                     f"Estimated Time Left: {update['estimated_time']}"
                 )
                 table_placeholder.dataframe(pd.DataFrame(update["current_data"]))
-                all_results = update["current_data"]
 
             total_scrape_time = round(time.time() - start_scrape_time, 2)
             second_spinner_placeholder.empty()
             st.success(f"Scraping completed in {total_scrape_time} seconds!")
 
-            emails_df = pd.DataFrame(all_results).drop_duplicates()
+            emails_df = pd.DataFrame(update["current_data"]).drop_duplicates()
             merged_df = df.merge(emails_df, left_on=url_column, right_on="URL", how="left").drop(columns=["URL"])
             csv_data = merged_df.to_csv(index=False).encode("utf-8")
 
