@@ -10,8 +10,11 @@ from concurrent.futures import ThreadPoolExecutor
 
 # ----------------- Custom CSS Loader --------------------
 def local_css(file_name):
-    with open(file_name) as f:
-        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+    try:
+        with open(file_name) as f:
+            st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+    except FileNotFoundError:
+        pass  # avoid crash if no style.css
 
 local_css("style.css")
 
@@ -27,13 +30,15 @@ def scrape_emails_from_url(driver, url):
     except Exception:
         return [{"URL": url, "Email": "Error fetching"}]
 
-async def run_scraper_async(urls, driver_path, spinner_placeholder):
+async def run_scraper_async(urls, spinner_placeholder):
+    # configure Chromium for Streamlit Cloud
     chrome_options = Options()
     chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.binary_location = "/usr/bin/chromium"  # chromium binary
 
-    service = Service(executable_path=driver_path)
+    service = Service(executable_path="/usr/bin/chromium-driver")  # chromium driver
     driver = webdriver.Chrome(service=service, options=chrome_options)
 
     loop = asyncio.get_event_loop()
@@ -62,6 +67,8 @@ async def run_scraper_async(urls, driver_path, spinner_placeholder):
             "estimated_time": f"{est_minutes} min",
             "current_data": list(results),
         }
+
+    driver.quit()
 
 # ----------------- Streamlit UI --------------------
 st.set_page_config(layout="centered")
@@ -108,9 +115,6 @@ if uploaded_file:
             )
             time.sleep(1)
 
-        # ----------------- Use Streamlit Cloud's ChromeDriver --------------------
-        driver_path = "/usr/bin/chromedriver"
-
         # ----------------- Second Spinner + Progress Bar --------------------
         second_spinner_placeholder = st.empty()
         second_spinner_placeholder.markdown(
@@ -144,7 +148,7 @@ if uploaded_file:
         async def scrape_and_display():
             start_scrape_time = time.time()
             all_results = []
-            async for update in run_scraper_async(urls, driver_path, first_spinner_placeholder):
+            async for update in run_scraper_async(urls, first_spinner_placeholder):
                 progress_bar.progress(update["progress"])
                 status_placeholder.markdown(
                     f"Progress: {update['scraped']} / {len(urls)}  \n"
