@@ -9,11 +9,11 @@ from selenium.webdriver.chrome.service import Service
 from concurrent.futures import ThreadPoolExecutor
 
 # ----------------- Custom CSS Loader --------------------
-def local_css(file_name):
-with open("style.css") as f:
-    st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+# def local_css(file_name):
+# with open("style.css") as f:
+#     st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
-local_css("style.css")
+# local_css("style.css")
 
 # ----------------- Scraper Logic --------------------
 def scrape_emails_from_url(driver, url):
@@ -170,6 +170,7 @@ csv_data,
 )
 
 asyncio.run(scrape_and_display())
+
 
 
 
